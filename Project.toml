@@ -1,0 +1,7 @@
+name = "Minerva"
+uuid = "9ebbf3f2-3779-11e9-1711-4589726164a5"
+authors = ["katabaticwind <fastman@fastmail.com>"]
+version = "0.1.0"
+
+[deps]
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
