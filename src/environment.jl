@@ -23,20 +23,26 @@ function reset!(env::AbstractEnvironment) end
 function step!(env::AbstractEnvironment, action) end
 function available_actions(env::AbstractEnvironment) end
 
-mutable struct BasicEnvironment <: AbstractEnvironment
+
+"""
+RandomWalk
+
+    Random walk with random rewards and meaningless actions.
+"""
+mutable struct RandomWalk <: AbstractEnvironment
     state
     action_space
 end
 
-BasicEnvironment() = BasicEnvironment([0.0], [1, 2])
+RandomWalk() = RandomWalk([0.0], [1, 2])
 
-function reset!(env::BasicEnvironment)
+function reset!(env::RandomWalk)
     env.state = [0.0]
-    env.action_space = available_actions(env)
-    return env.state, false
+    env.action_space = [1, 2]
+    return env.state, false  # state, done
 end
 
-function step!(env::BasicEnvironment, action)
+function step!(env::RandomWalk, action)
     @assert(action in env.action_space)
     env.state[1] += randn()
     r = randn()
@@ -48,44 +54,6 @@ function step!(env::BasicEnvironment, action)
     return env.state, r, done, info
 end
 
-function available_actions(env::BasicEnvironment)
+function available_actions(env::RandomWalk)
     return [1, 2]
 end
-
-
-# """
-# Policy
-#
-#     Chooses actions based on the current environment's state.
-# """
-# abstract type AbstractPolicy end
-# function action(π::AbstractPolicy, env::AbstractEnvironment) end
-#
-# struct RandomPolicy <: AbstractPolicy end
-#
-# function action(π::RandomPolicy, env::AbstractEnvironment)
-#     return rand([1, 2])
-# end
-
-
-# """
-# run_episode()
-#
-#     Run through a complete episode of training.
-#
-#     At each timestep, choose and action based on the environment's current state, and perform an environment update step using the chosen action. Repeat until reaching a terminal state.
-# """
-# function run_episode(env::E, π::P) where {E <: AbstractEnvironment, P <: AbstractPolicy}
-#     ep = Episode()
-#     s, done = reset!(env)
-#     while !done
-#       # render(env)
-#       a = action(π, env)
-#       s, r, done, info = step!(env, a)
-#       println("s = $s, a = $a, r = $r, done = $done")
-#       ep.total_reward += r
-#       ep.niter += 1
-#     end
-#     println("Episode finished after $(ep.niter) timesteps")
-#     return ep
-# end

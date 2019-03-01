@@ -3,7 +3,6 @@ using Flux: mse, back!
 using Flux.Optimise: _update_params!
 using Statistics
 
-abstract type AbstractAgent end
 
 """
 DeepQAgent
@@ -37,11 +36,12 @@ mutable struct DeepQAgent
     max_memory
     batch_size
     γ  # discount rate
+    update_steps
 end
 
-DeepQAgent(Q, loss, opt, max_memory) = DeepQAgent(Q, loss, opt, [], max_memory, 10, 0.0)
-DeepQAgent(Q, loss, opt, max_memory, batch_size) = DeepQAgent(Q, loss, opt, [], batch_size, 0.0)
-DeepQAgent(Q, loss, opt, max_memory, batch_size, γ) = DeepQAgent(Q, loss, opt, [], max_memory, batch_size, γ)
+DeepQAgent(Q, loss, opt, max_memory) = DeepQAgent(Q, loss, opt, [], max_memory, 10, 0.0, 1000)
+DeepQAgent(Q, loss, opt, max_memory, batch_size) = DeepQAgent(Q, loss, opt, [], batch_size, 0.0, 1000)
+DeepQAgent(Q, loss, opt, max_memory, batch_size, γ, update_steps) = DeepQAgent(Q, loss, opt, [], max_memory, batch_size, γ, update_steps)
 
 function action(agent::DeepQAgent, env::AbstractEnvironment, ϵ = 0.0)
     if rand() < ϵ
@@ -52,9 +52,9 @@ function action(agent::DeepQAgent, env::AbstractEnvironment, ϵ = 0.0)
 end
 
 function update!(agent::DeepQAgent)
-    sars = rand(agent.memory, agent.batch_size)
-    yhat = map(s -> estimate(s, agent), sars)
-    y = map(s -> target(s, agent), sars)
+    mem_batch = rand(agent.memory, agent.batch_size)
+    yhat = map(sars -> estimate(sars, agent), mem_batch)
+    y = map(sars -> target(sars, agent), mem_batch)
     l = agent.loss(yhat, y)
     back!(l)
     _update_params!(agent.opt, Flux.params(agent.Q))
@@ -71,15 +71,15 @@ function target(sars, agent)
     if done
         return r
     else
-        return r + agent.γ * maximum(agent.Q(s′))
+        return r + agent.γ * maximum(agent.Q(s′).data)
     end
 end
 
 function init_memory!(agent::DeepQAgent, env::AbstractEnvironment)
-    println("Initializing agent memory...")
+    @info "Initializing agent memory..."
     if length(agent.memory) > 0
         agent.memory = []
-        println("(cleared existing memory)")
+        @info "> cleared existing memory"
     end
     while length(agent.memory) < agent.max_memory
         s′, done = reset!(env)
@@ -87,69 +87,67 @@ function init_memory!(agent::DeepQAgent, env::AbstractEnvironment)
           a = action(agent, env)
           s = deepcopy(s′)
           s′, r, done, info = step!(env, a)
-          println("s = $s, a = $a, r = $r, s′ = $s′, done = $done")
-          if length(agent.memory) == agent.max_memory
-              println("done.")
-              return
-          end
+          # println("s = $s, a = $a, r = $r, s′ = $s′, done = $done")
+          length(agent.memory) == agent.max_memory && return
           pushfirst!(agent.memory, [s, a, r, s′, done])
         end
     end
-    println("done.")
 end
 
-function run_episode!(agent::DeepQAgent, env::AbstractEnvironment)
+function run_episode!(agent::DeepQAgent, env::AbstractEnvironment; ϵ = 0.05)
     total_reward = 0.0
     steps = 0
     s′, done = reset!(env)
     while !done
       # render(env)
-      a = action(agent, env)
+      a = action(agent, env, ϵ)
       s = deepcopy(s′)
       s′, r, done, info = step!(env, a)
-      println("s = $s, a = $a, r = $r, s′ = $s′, done = $done")
+      # println("s = $s, a = $a, r = $r, s′ = $s′, done = $done")
       length(agent.memory) == agent.max_memory && pop!(agent.memory)
       pushfirst!(agent.memory, [s, a, r, s′, done])
       total_reward += r
       steps += 1
       update!(agent)
     end
-    println("> Episode finished after $steps timesteps")
+    # @info "Episode finished after $steps timesteps"
     return total_reward, steps
 end
 
 function evaluate(agent::DeepQAgent, env::AbstractEnvironment; n = 100)
     history = []
-    for _ in 1:n
+    for i in 1:n
         total_reward = 0.0
         steps = 0
         s′, done = reset!(env)
         while !done
-            a = action(agent, env)
+            a = action(agent, env)  # no exploration here (ϵ = 0.0)
             s = deepcopy(s′)
             s′, r, done, info = step!(env, a)
             total_reward += r
             steps += 1
             # println("s = $s, a = $a, r = $r, s′ = $s′, done = $done")
         end
+        # @info "Finished episode $i" total_reward steps
         push!(history, (total_reward=total_reward, steps=steps))
     end
     return mean([e.total_reward for e in history])
 end
 
-function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf)
+function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf, ϵ = 0.05)
     init_memory!(agent, env)
-    println("Training agent...")
+    @info "Training agent..."
     history = []
     episodes = 0
     improving = true
     while improving && episodes < max_episodes
-        total_reward, steps = run_episode!(agent, env)
+        total_reward, steps = run_episode!(agent, env, ϵ = ϵ)
         push!(history, (total_reward=total_reward, steps=steps))
         episodes += 1
-        score = evaluate(agent, env, n = 1)
-        println("> Score = $score")
+        if episodes % 100 == 0
+            score = evaluate(agent, env, n = 100)
+            @info "Evaluating agent (n=100)" score
+        end
     end
-    println("done.")
     return history
 end
