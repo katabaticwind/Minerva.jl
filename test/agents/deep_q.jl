@@ -2,7 +2,7 @@ using Minerva, Flux
 using Flux: mse
 
 Q = Chain(Dense(4, 2))
-loss(x, y) = mse(x, y)
+loss(p, y) = mse(p, y)
 opt = ADAM(0.01)
 agent = DeepQAgent(Q, loss, opt, 10, 2, 0.01)
 env = CartPole()

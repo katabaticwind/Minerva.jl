@@ -53,9 +53,9 @@ end
 
 function update!(agent::DeepQAgent)
     mem_batch = rand(agent.memory, agent.batch_size)
-    yhat = map(sars -> estimate(sars, agent), mem_batch)
+    p = map(sars -> estimate(sars, agent), mem_batch)
     y = map(sars -> target(sars, agent), mem_batch)
-    l = agent.loss(yhat, y)
+    l = agent.loss(p, y)
     back!(l)
     _update_params!(agent.opt, Flux.params(agent.Q))
 end
@@ -71,7 +71,7 @@ function target(sars, agent)
     if done
         return r
     else
-        return r + agent.γ * maximum(agent.Q(s′).data)
+        return r + agent.γ * maximum(agent.Q_target(s′).data)
     end
 end
 
