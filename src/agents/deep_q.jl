@@ -38,7 +38,7 @@ mutable struct DeepQAgent
     max_memory
     batch_size
     γ  # discount rate
-    update_steps
+    update_episodes
 end
 
 DeepQAgent(Q, loss, opt, mm) = DeepQAgent(Q, deepcopy(Q), loss, opt, [], mm, 10, 0.0, 1000)
@@ -90,7 +90,7 @@ function init_memory!(agent::DeepQAgent, env::AbstractEnvironment)
     while length(agent.memory) < agent.max_memory
         s′, done = reset!(env)
         while !done
-            a = action(agent, env)
+            a = action(agent, env, 1.0)  # random actions
             s = deepcopy(s′)
             s′, r, done, info = step!(env, a)
             # println("s = $s, a = $a, r = $r, s′ = $s′, done = $done")
@@ -115,16 +115,14 @@ function run_episode!(agent::DeepQAgent, env::AbstractEnvironment; ϵ = 0.05)
         total_reward += r
         steps += 1
         update!(agent)
-        if steps % agent.update_steps == 0
-            update_target(agent)
-        end
     end
     # @info "Episode finished after $steps timesteps"
     return total_reward, steps
 end
 
-function evaluate(agent::DeepQAgent, env::AbstractEnvironment; n = 100)
+function evaluate(agent::DeepQAgent, env::AbstractEnvironment; n = 100, rendered = false)
     history = []
+    rendered && render(env)
     for i in 1:n
         total_reward = 0.0
         steps = 0
@@ -140,10 +138,11 @@ function evaluate(agent::DeepQAgent, env::AbstractEnvironment; n = 100)
         # @info "Finished episode $i" total_reward steps
         push!(history, (total_reward=total_reward, steps=steps))
     end
+    env.rendered = false
     return mean([e.total_reward for e in history])
 end
 
-function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf, ϵ0 = 1.00)
+function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf, ϵ0 = 1.00, ϵmin = 0.10, nsteps = 50, stepsize = 0.1, neval = 1000, eval_freq = 20)
     init_memory!(agent, env)
     @info "Training agent..."
     ϵ = ϵ0
@@ -152,12 +151,15 @@ function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf,
     improving = true
     while improving && episodes < max_episodes
         total_reward, steps = run_episode!(agent, env, ϵ = ϵ)
-        ϵ = stepdecay(episodes, ϵ0, 0.01, 1000, 0.1)
-        push!(history, (total_reward=total_reward, steps=steps))
         episodes += 1
-        if episodes % 100 == 0
-            score = evaluate(agent, env, n = 100)
-            @info format("episodes: {}, score: {}, epsilon: {}", episodes, score, ϵ)
+        ϵ = stepdecay(episodes, ϵ0, ϵmin, nsteps, stepsize)
+        push!(history, (total_reward=total_reward, steps=steps))
+        if episodes % agent.update_episodes == 0
+            update_target(agent)
+        end
+        if episodes % eval_freq == 0
+            score = evaluate(agent, env, n = neval)
+            @info format("episodes: {:d}, score: {:.2f}, epsilon: {:.2f}", episodes, score, ϵ)
         end
     end
     return history
