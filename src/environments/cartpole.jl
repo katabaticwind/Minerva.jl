@@ -21,14 +21,16 @@ mutable struct CartPole <: AbstractEnvironment
     state::Vector{Float64}
     action_space
 	maxsteps::Int
+	rendered
 end
 
-CartPole() = CartPole(0.1 * rand(4) .- 0.05, [1, 2], 500)
+CartPole() = CartPole(0.1 * rand(4) .- 0.05, [1, 2], 500, false)
 
 function reset!(env::CartPole)
     env.state = 0.1 * rand(4) .- 0.05
     env.action_space = [1, 2]
 	env.maxsteps = 500
+	env.rendered && render(env)
     return env.state, false
 end
 
@@ -46,6 +48,7 @@ function step!(env::CartPole, action)
     if !done
         env.action_space = available_actions(env)
     end
+	env.rendered && render(env)
     return env.state, r, done, info
 end
 
@@ -57,4 +60,17 @@ function isdone(env::CartPole)
   x, xvel, θ, θvel = env.state
   !(-x_threshold <= x <= x_threshold &&
     -θ_threshold <= θ <= θ_threshold)
+end
+
+function render(env::CartPole)
+	env.rendered = true
+	x, xvel, θ, θvel = env.state
+	θ = θ + pi / 2
+	plot([x, x + 2 * pole_length * cos(θ)],
+		 [0.0, 2 * pole_length * sin(θ)],
+		  linewidth = 3,
+		  legend = false,
+		  xlim = (-2.25, 2.25),
+		  ylim = (-1.25, 1.25));
+	display(scatter!([x], [0.0], color = 4, markersize = 6))
 end
