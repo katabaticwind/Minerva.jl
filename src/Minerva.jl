@@ -1,10 +1,13 @@
 module Minerva
 
+using Plots
+
 export RandomWalk,
        CartPole,
        MountainCar,
        reset!,
-       step!
+       step!,
+       render
 
 include("environment.jl")
 include("environments/cartpole.jl")
