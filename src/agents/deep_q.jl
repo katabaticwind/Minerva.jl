@@ -124,6 +124,7 @@ function evaluate(agent::DeepQAgent, env::AbstractEnvironment; n = 100, rendered
     history = []
     rendered && render(env)
     for i in 1:n
+        # run an episode
         total_reward = 0.0
         steps = 0
         s′, done = reset!(env)
@@ -134,6 +135,10 @@ function evaluate(agent::DeepQAgent, env::AbstractEnvironment; n = 100, rendered
             total_reward += r
             steps += 1
             # println("s = $s, a = $a, r = $r, s′ = $s′, done = $done")
+            if steps == env.maxsteps
+                @info "agent reached goal!"
+                break
+            end
         end
         # @info "Finished episode $i" total_reward steps
         push!(history, (total_reward=total_reward, steps=steps))
@@ -158,9 +163,11 @@ function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf,
             update_target(agent)
         end
         if episodes % eval_freq == 0
+            _ = evaluate(agent, env, n = 1, rendered = true)
             score = evaluate(agent, env, n = neval)
             @info format("episodes: {:d}, score: {:.2f}, epsilon: {:.2f}", episodes, score, ϵ)
         end
+        episodes == max_episodes && @info "agent reached goal!"
     end
     return history
 end

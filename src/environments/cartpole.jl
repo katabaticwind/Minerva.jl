@@ -24,12 +24,12 @@ mutable struct CartPole <: AbstractEnvironment
 	rendered
 end
 
-CartPole() = CartPole(0.1 * rand(4) .- 0.05, [1, 2], 500, false)
+CartPole() = CartPole(0.1 * rand(4) .- 0.05, [1, 2], 250, false)
 
 function reset!(env::CartPole)
     env.state = 0.1 * rand(4) .- 0.05
     env.action_space = [1, 2]
-	env.maxsteps = 500
+	env.maxsteps = 250
 	env.rendered && render(env)
     return env.state, false
 end
