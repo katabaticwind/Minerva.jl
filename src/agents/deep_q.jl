@@ -3,6 +3,12 @@ using Flux: mse, back!
 using Flux.Optimise: _update_params!
 using Statistics
 using Formatting
+using Random
+
+
+# TODO: system for saving snapshots of the agent that can be re-loaded
+# TODO: run_episode gets path to save gif to
+# TODO: passing kwargs through as dicts?
 
 
 """
@@ -155,38 +161,106 @@ function run_episode(agent::DeepQAgent, env::AbstractEnvironment; ϵ = 0.05, ren
     return total_reward, steps
 end
 
-function evaluate(agent::DeepQAgent, env::AbstractEnvironment, n = 1; ϵ = 0.05, verbose = false)
+function evaluate(agent::DeepQAgent, env::AbstractEnvironment, n = 100; ϵ = 0.05, verbose = false)
+    env.rendered = false
     history = []
     @progress for i = 1:n
         total_reward, steps = run_episode(agent, env, ϵ = ϵ, verbose = verbose)
         push!(history, (total_reward = total_reward, steps = steps))
     end
-    return history
+    total_reward = mean([e.total_reward for e in history])
+    steps = mean([e.steps for e in history])
+    return total_reward, steps
 end
 
-function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf, ϵ0 = 1.00, ϵmin = 0.10, nsteps = 50, stepsize = 0.1, neval = 1000, eval_freq = 20)
+"""
+train!(agent, env; <kwargs>)
+
+    Train `agent` on `env`.
+
+    # Arguments
+    - `max_episodes`: maximum number of episodes to train the agent.
+    - `eval_freq`: number of episodes between fitness evaluations.
+    - `ϵ_schedule`: determines ϵ-annealing based on number of epsiodes.
+
+    # Example
+    ```julia-repl
+    ϵ_schedule = StepDecay(1.0, 0.05, 0.1, 50)
+    agent = DeepQAgent(...)
+    env = CartPole(...)
+    train!(agent, env, eval_freq = 20, ϵ_schedule = ϵ_schedule)
+    ```
+"""
+function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf, eval_freq = 20, eval_episodes = 100, eval_ϵ = 0.05, ϵ_schedule = nothing, verbose = false, patience = 5)
+
     init_memory!(agent, env)
-    @info "Training agent..."
-    ϵ = ϵ0
-    history = []
+    @info "training agent..."
     episodes = 0
+    recorder = ExperimentRecorder("./log-$(randstring(5))")
+    current_best_score = -Inf
+    n_evals_since_best_score = 0
     improving = true
     while improving && episodes < max_episodes
+
+        # training episode
         total_reward, steps = run_episode!(agent, env, ϵ = ϵ)
         episodes += 1
-        ϵ = stepdecay(episodes, ϵ0, ϵmin, nsteps, stepsize)
-        push!(history, (total_reward=total_reward, steps=steps))
+        ϵ = ϵ_schedule(episodes)
+        verbose && @info "<training status message>"
+        message = (episode=episodes, score=total_reward, steps=steps, epsilon=ϵ)
+        stamp!(recorder, message, :train)
+
+        # target network update
+        verbose && @info "updating target network..."
         if episodes % agent.update_episodes == 0
             update_target!(agent)
         end
+
+        # fitness evaluation
         if episodes % eval_freq == 0
-            _ = run_episode(agent, env, n = 1, rendered = true)
-            score = run_episode(agent, env, n = neval)
-            @info format("episodes: {:d}, score: {:.2f}, epsilon: {:.2f}", episodes, score, ϵ)
+            total_reward, steps = evaluate(agent, env, eval_episodes, ϵ = eval_ϵ)
+            @info "<testing status message>"
+            message = (episode=episode, score=total_reward, steps=steps, epsilon=eval_ϵ)
+            stamp!(recorder, message, :test)
+            run_episode(agent, env, rendered = true)
+
+            # snapshots
+            if score > current_best_score
+                current_best_score = score
+                # save a snapshot of agent...
+            else
+                n_evals_since_best_score += 1
+                n_evals_since_best_score == patience && break
+            end
         end
-        episodes == max_episodes && @info "agent reached goal!"
     end
+    verbose && @info "agent finished training in $episodes episodes"
     return history
 end
 
-stepdecay(t, max_x, min_x, nsteps, stepsize) = max(max_x - floor(t / nsteps) * stepsize, min_x)
+# function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf, ϵ0 = 1.00, ϵmin = 0.10, nsteps = 50, stepsize = 0.1, neval = 1000, eval_freq = 20)
+#     init_memory!(agent, env)
+#     @info "Training agent..."
+#     ϵ = ϵ0
+#     history = []
+#     episodes = 0
+#     improving = true
+#     while improving && episodes < max_episodes
+#         total_reward, steps = run_episode!(agent, env, ϵ = ϵ)
+#         episodes += 1
+#         ϵ = stepdecay(episodes, ϵ0, ϵmin, nsteps, stepsize)
+#         push!(history, (total_reward=total_reward, steps=steps))
+#         if episodes % agent.update_episodes == 0
+#             update_target!(agent)
+#         end
+#         if episodes % eval_freq == 0
+#             _ = run_episode(agent, env, n = 1, rendered = true)
+#             score = run_episode(agent, env, n = neval)
+#             @info format("episodes: {:d}, score: {:.2f}, epsilon: {:.2f}", episodes, score, ϵ)
+#         end
+#         episodes == max_episodes && @info "agent reached goal!"
+#     end
+#     return history
+# end
+#
+# stepdecay(t, max_x, min_x, nsteps, stepsize) = max(max_x - floor(t / nsteps) * stepsize, min_x)

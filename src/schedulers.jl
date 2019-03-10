@@ -14,13 +14,13 @@ d = StepDecay(1.0, 0.1, 0.1, 5)
 plot(1:100, d.(1:100))
 
 
-struct ExpDecay <: AbstractScheduler
+struct ExponentialDecay <: AbstractScheduler
     xmax
     xmin
     ρ
 end
 
-(d::ExpDecay)(t) = max(d.xmin, d.xmax * d.ρ^t)
+(d::ExponentialDecay)(t) = max(d.xmin, d.xmax * d.ρ^t)
 
-d = ExpDecay(1.0, 0.1, 0.95)
+d = ExponentialDecay(1.0, 0.1, 0.95)
 plot(1:100, d.(1:100))
