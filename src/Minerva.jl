@@ -15,8 +15,10 @@ export RandomWalk,
 
 include("agent.jl")
 include("agents/deep_q.jl")
+include("agents/vanilla_pg.jl")
 
 export DeepQAgent,
+       VanillaPG,
        action,
        train!,
        evaluate
