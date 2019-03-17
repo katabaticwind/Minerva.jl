@@ -26,4 +26,9 @@ include("schedulers.jl")
 export StepDecay,
        ExpDecay
 
+include("recorders.jl")
+
+export ExperimentRecorder,
+       stamp!
+
 end # module
