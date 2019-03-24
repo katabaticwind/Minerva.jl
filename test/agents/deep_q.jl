@@ -1,18 +1,26 @@
 using Minerva, Flux
 using Flux: mse
 
-# TODO: decay learning rate?
-# TODO: add "do nothing" action?
+# TODO: BatchNorm?
+# TODO: Dropout?
+# TODO: Regularization?
 
+# agent settings
 max_memory = 1000
-batch_size = 32
 discount_rate = 1.00
-update_episodes = 5  # epsiodes
+update_episodes = 5
 
-Q = Chain(Dense(4, 64, relu), Dense(64, 64, relu), Dense(64, 2))
-loss(x, y) = mse(x, y)
-opt = RMSProp(0.001)
-agent = DeepQAgent(Q, loss, opt, max_memory, batch_size, discount_rate, update_episodes)
+# network settings
+batch_size = 32
+learning_rate = 1e-2
+
+Q = Chain(
+    Dense(4, 64),
+    Dense(64, 64),
+    Dense(64, 2)
+)
+agent = DeepQAgent(Q, learning_rate)
 env = CartPole()
-history = train!(agent, env, max_episodes = 1000)
-evaluate(agent, env, n = 1, rendered = true)
+ϵ_schedule = StepDecay(1.0, 0.05, 0.1, 1)
+recorder = train!(agent, env, max_episodes = 500, ϵ_schedule = ϵ_schedule)
+evaluate(agent, env, 1, ϵ = 0.05, rendered = true)
