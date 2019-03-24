@@ -30,7 +30,7 @@ function compute_loss(agent::VanillaPG, states, actions, rewards)
 end
 
 function update!(agent::VanillaPG, loss)
-    loss = mean(loss)
+    loss = -mean(loss)
     back!(loss)
     _update_params!(agent.opt, Flux.params(agent.model))
 end
@@ -52,7 +52,7 @@ function run_episode(agent::VanillaPG, env::AbstractEnvironment; rendered = fals
         steps += 1
         total_reward += r
         push!(rewards, agent.γ^steps * r)  # NOTE: **discounted** rewards
-        verbose && @info "s = $s, a = $a, r = $r, s′ = $s′, done = $done"
+        verbose && @info "s = $s, a = $a, r = $r, s′ = $(s′), done = $done"
         steps == env.maxsteps && break
     end
     verbose && @info "episode finished in $steps timesteps"

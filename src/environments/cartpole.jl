@@ -10,6 +10,7 @@ const force_mag = 10.0
 const τ = 0.02  # seconds between state updates
 const θ_threshold = 24π / 360  # angle at which to fail the episode
 const x_threshold = 2.4
+const MAXSTEPS = 200
 
 
 """
@@ -24,12 +25,12 @@ mutable struct CartPole <: AbstractEnvironment
 	rendered
 end
 
-CartPole() = CartPole(0.1 * rand(4) .- 0.05, [1, 2], 250, false)
+CartPole() = CartPole(0.1 * rand(4) .- 0.05, [1, 2], MAXSTEPS, false)
 
 function reset!(env::CartPole)
     env.state = 0.1 * rand(4) .- 0.05
     env.action_space = [1, 2]
-	env.maxsteps = 250
+	env.maxsteps = MAXSTEPS
 	env.rendered && render(env)
     return env.state, false
 end
@@ -70,7 +71,7 @@ function render(env::CartPole)
 		 [0.0, 2 * pole_length * sin(θ)],
 		  linewidth = 3,
 		  legend = false,
-		  xlim = (-2.25, 2.25),
+		  xlim = (-2.4, 2.4),
 		  ylim = (-1.25, 1.25));
 	display(scatter!([x], [0.0], color = 4, markersize = 6))
 end

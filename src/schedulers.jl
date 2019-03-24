@@ -22,5 +22,5 @@ end
 
 (d::ExponentialDecay)(t) = max(d.xmin, d.xmax * d.ρ^t)
 
-d = ExponentialDecay(1.0, 0.1, 0.95)
-plot(1:100, d.(1:100))
+d = ExponentialDecay(1.0, 0.1, 0.99)
+plot(1:250, d.(1:250))
