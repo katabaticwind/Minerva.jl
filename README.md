@@ -5,9 +5,13 @@ Reinforcement Learning in Julia
 - DQN
 
 ## On-Policy Methods
-- Vanilla Policy Gradient
+- Vanilla Policy Gradient (REINFORCE)
 
-## Plans
-- Extend/improve DQN and Vanilla PG.
-- Add TRPO.
-- Add asynchronous methods
+## Future Plans
+- Extend/improve DQN and Vanilla PG
+    - Baselines
+    - "Rainbow"
+- Add A2C
+- Add PPO
+- Add DDPG
+- Add asynchronous methods?
