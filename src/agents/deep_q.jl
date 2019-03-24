@@ -6,11 +6,6 @@ using Formatting
 using Random
 
 
-# TODO: system for saving snapshots of the agent that can be re-loaded
-# TODO: run_episode gets path to save gif to
-# TODO: passing kwargs through as dicts?
-
-
 """
 DeepQAgent
 
@@ -47,6 +42,25 @@ mutable struct DeepQAgent
     update_episodes
 end
 
+function DeepQAgent(Q, lr)
+    Q_target = deepcopy(Q)
+    loss = mse
+    opt = RMSProp(lr)
+    memory = []
+    max_memory = 1000
+    batch_size = 32
+    γ = 1.0
+    update_episodes = 5
+    return DeepQAgent(Q,
+                      Q_target,
+                      loss,
+                      opt,
+                      memory,
+                      max_memory,
+                      batch_size,
+                      γ,
+                      update_episodes)
+end
 DeepQAgent(Q, loss, opt, mm) = DeepQAgent(Q, deepcopy(Q), loss, opt, [], mm, 10, 0.0, 1000)
 DeepQAgent(Q, loss, opt, mm, bs) = DeepQAgent(Q, deepcopy(Q), loss, opt, [], mm, bs, 0.0, 1000)
 DeepQAgent(Q, loss, opt, mm, bs, γ, us) = DeepQAgent(Q, deepcopy(Q), loss, opt, [], mm, bs, γ, us)
@@ -87,6 +101,20 @@ function target(sars, agent)
     end
 end
 
+# function update!(agent::DeepQAgent)
+#     mem_batch = rand(agent.memory, agent.batch_size)
+#     S = hcat([m[1] for m in mem_batch]...)
+#     A = hcat([m[2] for m in mem_batch]...)
+#     R = hcat([m[3] for m in mem_batch]...)
+#     S_ = hcat([m[4] for m in mem_batch]...)
+#     done = hcat([m[5] for m in mem_batch]...)
+#     target = R .+ agent.γ .* .!done .* maximum(agent.Q_target(S_).data, dims = 1)
+#     estimate = agent.Q(S)[CartesianIndex.(A', axes(S, 2))]
+#     loss = agent.loss(estimate, target)
+#     back!(loss)
+#     _update_params!(agent.opt, Flux.params(agent.Q))
+# end
+
 function init_memory!(agent::DeepQAgent, env::AbstractEnvironment)
     @info "Initializing agent memory..."
     if length(agent.memory) > 0
@@ -113,11 +141,11 @@ run_episode!(agent, env; <kwargs>)
     # Arguments
     - `ϵ`: probability of performing a non-greedy action.
 """
-function run_episode!(agent::DeepQAgent, env::AbstractEnvironment; ϵ = 0.05, render = false, verbose = false)
+function run_episode!(agent::DeepQAgent, env::AbstractEnvironment; ϵ = 0.05, rendered = false, verbose = false)
     total_reward = 0.0
     steps = 0
     s′, done = reset!(env)
-    render && render(env)
+    env.rendered = rendered
     while !done
         a = action(agent, env, ϵ)
         s = deepcopy(s′)
@@ -129,6 +157,7 @@ function run_episode!(agent::DeepQAgent, env::AbstractEnvironment; ϵ = 0.05, re
         steps += 1
         update!(agent)
     end
+    env.rendered = false
     verbose && @info "episode finished in $steps timesteps"
     return total_reward, steps
 end
@@ -143,11 +172,11 @@ run_episode(agent, env; <kwargs>)
     # Arguments
     - `ϵ`: probability of performing a non-greedy action.
 """
-function run_episode(agent::DeepQAgent, env::AbstractEnvironment; ϵ = 0.05, render = false, verbose = false)
+function run_episode(agent::DeepQAgent, env::AbstractEnvironment; ϵ = 0.05, rendered = false, verbose = false)
     total_reward = 0.0
     steps = 0
     s′, done = reset!(env)
-    render && render(env)
+    env.rendered = rendered
     while !done
         a = action(agent, env, ϵ)
         s = deepcopy(s′)
@@ -155,17 +184,20 @@ function run_episode(agent::DeepQAgent, env::AbstractEnvironment; ϵ = 0.05, ren
         total_reward += r
         steps += 1
         verbose && @info "s = $s, a = $a, r = $r, s′ = $s′, done = $done"
-        steps == env.maxsteps && break
+        if steps == env.maxsteps
+            @info "> agent reached end of episode!"
+            break
+        end
     end
+    env.rendered = false
     verbose && @info "episode finished in $steps timesteps"
     return total_reward, steps
 end
 
-function evaluate(agent::DeepQAgent, env::AbstractEnvironment, n = 100; ϵ = 0.05, verbose = false)
-    env.rendered = false
+function evaluate(agent::DeepQAgent, env::AbstractEnvironment, n = 100; ϵ = 0.05, rendered = false, verbose = false)
     history = []
     @progress for i = 1:n
-        total_reward, steps = run_episode(agent, env, ϵ = ϵ, verbose = verbose)
+        total_reward, steps = run_episode(agent, env, ϵ = ϵ, rendered = rendered, verbose = verbose)
         push!(history, (total_reward = total_reward, steps = steps))
     end
     total_reward = mean([e.total_reward for e in history])
@@ -191,7 +223,7 @@ train!(agent, env; <kwargs>)
     train!(agent, env, eval_freq = 20, ϵ_schedule = ϵ_schedule)
     ```
 """
-function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf, eval_freq = 20, eval_episodes = 100, eval_ϵ = 0.05, ϵ_schedule = nothing, verbose = false, patience = 5)
+function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf, eval_freq = 20, eval_episodes = 100, eval_ϵ = 0.05, ϵ_schedule = nothing, verbose = false, patience = 10)
 
     init_memory!(agent, env)
     @info "training agent..."
@@ -200,8 +232,8 @@ function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf,
     current_best_score = -Inf
     n_evals_since_best_score = 0
     improving = true
+    ϵ = ϵ_schedule(0)
     while improving && episodes < max_episodes
-
         # training episode
         total_reward, steps = run_episode!(agent, env, ϵ = ϵ)
         episodes += 1
@@ -210,7 +242,9 @@ function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf,
         message = (episode=episodes, score=total_reward, steps=steps, epsilon=ϵ)
         stamp!(recorder, message, :train)
 
-        # target network update
+        agent.opt.eta = 0.99 * agent.opt.eta
+
+        # *target* network update
         verbose && @info "updating target network..."
         if episodes % agent.update_episodes == 0
             update_target!(agent)
@@ -218,15 +252,17 @@ function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf,
 
         # fitness evaluation
         if episodes % eval_freq == 0
-            total_reward, steps = evaluate(agent, env, eval_episodes, ϵ = eval_ϵ)
-            @info "<testing status message>"
-            message = (episode=episode, score=total_reward, steps=steps, epsilon=eval_ϵ)
+            score, steps = evaluate(agent, env, eval_episodes, ϵ = eval_ϵ)
+            @info "episode: $episodes, score: $score, lr: $(agent.opt.eta), ϵ: $ϵ"
+            message = (episode=episodes, score=score, steps=steps, epsilon=eval_ϵ)
             stamp!(recorder, message, :test)
-            run_episode(agent, env, rendered = true)
+            # evaluate(agent, env, 1, ϵ = eval_ϵ, rendered = true)
 
             # snapshots
             if score > current_best_score
+                @info "> new best score achieved!"
                 current_best_score = score
+                n_evals_since_best_score = 0
                 # save a snapshot of agent...
             else
                 n_evals_since_best_score += 1
@@ -235,32 +271,5 @@ function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf,
         end
     end
     verbose && @info "agent finished training in $episodes episodes"
-    return history
+    return recorder
 end
-
-# function train!(agent::DeepQAgent, env::AbstractEnvironment; max_episodes = Inf, ϵ0 = 1.00, ϵmin = 0.10, nsteps = 50, stepsize = 0.1, neval = 1000, eval_freq = 20)
-#     init_memory!(agent, env)
-#     @info "Training agent..."
-#     ϵ = ϵ0
-#     history = []
-#     episodes = 0
-#     improving = true
-#     while improving && episodes < max_episodes
-#         total_reward, steps = run_episode!(agent, env, ϵ = ϵ)
-#         episodes += 1
-#         ϵ = stepdecay(episodes, ϵ0, ϵmin, nsteps, stepsize)
-#         push!(history, (total_reward=total_reward, steps=steps))
-#         if episodes % agent.update_episodes == 0
-#             update_target!(agent)
-#         end
-#         if episodes % eval_freq == 0
-#             _ = run_episode(agent, env, n = 1, rendered = true)
-#             score = run_episode(agent, env, n = neval)
-#             @info format("episodes: {:d}, score: {:.2f}, epsilon: {:.2f}", episodes, score, ϵ)
-#         end
-#         episodes == max_episodes && @info "agent reached goal!"
-#     end
-#     return history
-# end
-#
-# stepdecay(t, max_x, min_x, nsteps, stepsize) = max(max_x - floor(t / nsteps) * stepsize, min_x)
