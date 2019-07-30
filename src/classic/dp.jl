@@ -173,6 +173,23 @@ function policy_evaluation(V0, pA, pR, pS, R, gamma; tol::Float64=1e-6)
     return V
 end
 
+function policy_sweep(V0, pA, pR, pS, R, gamma)
+    V = copy(V0)
+    for (v_idx, v) in enumerate(V)
+        v_update = 0.0
+        for (a_idx, pa) in enumerate(pA[v_idx, :])
+            for (r_idx, pr) in enumerate(pR[v_idx, a_idx, :])
+                r = R[r_idx]
+                for (s_idx, ps) in enumerate(pS[v_idx, a_idx, :])
+                    v_update += pa * pr * ps * (r + gamma * V[s_idx])
+                end
+            end
+        end
+        V[v_idx] = v_update
+    end
+    return V
+end
+
 # TODO: random assignment on ties
 function policy_improvement(V, nactions, pR, pS, R, gamma)
     policy = zeros(length(V), nactions)  # policy[s, a] = π(a | s)
@@ -217,9 +234,37 @@ function policy_iteration(policy, pR, pS, R, gamma, tol=1e-6)
     return policy, value
 end
 
-# function value_iteration()
-#
-# end
+function value_iteration(pR, pS, R, gamma; tol=1e-6)
+    nstates, nactions, _ = size(pS)
+    V = zeros(nstates)
+    policy = zeros(nstates, nactions)  # policy[s, a] = π(a | s)
+    Δ = Inf
+    while Δ > tol
+        Δ = 0.0
+        for (v_idx, v) in enumerate(V)
+            a_max = 0
+            Q_max = -Inf
+            for a_idx in 1:nactions
+                Q = 0.0
+                for (s_idx, ps) in enumerate(pS[v_idx, a_idx, :])
+                    v_next = V[s_idx]
+                    for (r_idx, pr) in enumerate(pR[v_idx, a_idx, :])
+                        r = R[r_idx]
+                        Q += ps * pr * (r + v_next)
+                    end
+                end
+                if Q > Q_max
+                    a_max = a_idx
+                    Q_max = Q
+                end
+            end
+            V[v_idx] = Q_max
+            policy[v_idx, a_max] = 1.0
+            Δ = max(Δ, abs(V[v_idx] - v))
+        end
+    end
+    return policy, value
+end
 
 world, grid = GridWorld(4);
 pA = random_policy(4);
@@ -228,6 +273,7 @@ pS = world.probabilities[:states];
 R = world.rewards;
 gamma = 1.0;  # no discounting
 policy, value = policy_iteration(pA, pR, pS, R, gamma);
+policy, value = value_iteration(pA)
 
 function value_grid(value)
     n = Int(sqrt(size(value)[1]))
