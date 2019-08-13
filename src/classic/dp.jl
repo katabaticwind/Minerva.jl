@@ -239,6 +239,7 @@ function value_iteration(pR, pS, R, gamma; tol=1e-6)
     V = zeros(nstates)
     policy = zeros(nstates, nactions)  # policy[s, a] = π(a | s)
     Δ = Inf
+    i = 0
     while Δ > tol
         Δ = 0.0
         for (v_idx, v) in enumerate(V)
@@ -262,7 +263,9 @@ function value_iteration(pR, pS, R, gamma; tol=1e-6)
             policy[v_idx, a_max] = 1.0
             Δ = max(Δ, abs(V[v_idx] - v))
         end
+        i += 1
     end
+    println("Converged in $i steps (Δ = $Δ).")
     return policy, value
 end
 
