@@ -5,16 +5,16 @@ Deep reinforcement learning in Julia [**under construction**].
 
 ### Off-Policy Methods
 - DQN
-  |- Vanilla
-  |- "Rainbow"
+  - Vanilla
+  - "Rainbow"
 
 ### On-Policy Methods
 - Policy Gradient ("REINFORCE")
-  |- Vanilla
-  |- Baselines
+  - Vanilla
+  - Baselines
 - Advantage Actor-Critic (A2C)
-  |- Synchronous
-  |- Asynchronous
+  - Synchronous
+  - Asynchronous
 - Proximal Policy Optimization (PPO)
 
 ### Model-Free Methods
